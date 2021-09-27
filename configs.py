@@ -1,56 +1,76 @@
 import json
+from os.path import expandvars, expanduser
 
 
 class Configs:
-    def __raise_type_error(self, __needed, __supplied):
-        TypeError(f"Invalid type, \"{__needed if type(__needed) is str else __needed.__name__}\" needed, "
-                  f"\"{type(__supplied).__name__}\" supplied")
+    class MissingDefaultConfigFilePathException(Exception):
+        pass
 
-    def __recursive_check(self, __check):
-        def __rec(__self, __input, __types):
-            for __i, __v in __input.items():
-                if __i not in __types:
-                    raise KeyError(__i)
-                elif type(__v) is not __types[__i]:
-                    __self.__raise_type_error(__types[__i], type(__v))
-                elif __types[__i] == "path" and type(__v) is not str:
-                    __self.__raise_type_error("path (str)", type(__v))
-                elif type(__v) is dict:
-                    if type(__types[__i]) is not dict:
-                        __self.__raise_type_error(type(__types[__i]), type(__v))
-                    __self.__recursive_check(__self, __v, __types[__i])
-                elif type(__v) is list:
-                    t = __types[__i][0]
-                    if not all(map(lambda l: type(l) is t, __v)):
-                        __self.__raise_type_error(t, type(__v))
+    class NoConfigAvailableException(Exception):
+        pass
 
-        __rec(self, __check, self.types)
+    class ConfigFormatErrorException(Exception):
+        pass
 
-    def __init__(self, types, data):
-        self.types = types
-        self.__recursive_check(data)
-        self.data = data
+    def raise_type_error(self, _needed, _supplied):
+        TypeError(f"Invalid type, \"{_needed if type(_needed) is str else _needed.__name__}\" needed, "
+                  f"\"{type(_supplied).__name__}\" supplied")
 
-    def set(self, __key, __value):
-        if self.types[__key] == "path":
-            if type(__value) is not str:
-                self.__raise_type_error("path (str)", type(__value))
+    def recursive_check(self, _check):
+        def _rec(_self, _input, _types):
+            for _i, _v in _input.items():
+                if _i not in _types:
+                    raise KeyError(_i)
+                elif type(_v) is not type(_types[_i]):
+                    _self.raise_type_error(type(_types[_i]), type(_v))
+                elif type(_v) is dict:
+                    if type(_types[_i]) is not dict:
+                        _self.raise_type_error(type(_types[_i]), type(_v))
+                    _rec(_self, _v, _types[_i])
+                elif type(_v) is list:
+                    _uniq = set()
+                    for _t in _types[_i]:
+                        _uniq.add(type(_t))
+                    if len(_uniq) != 1:
+                        raise self.ConfigFormatErrorException(_uniq)
+                    t = _types[_i][0]
+                    if not all(map(lambda l: type(l) is t, _v)):
+                        _self.raise_type_error(t, type(_v))
 
-        if type(__value) is self.types[__key]:
-            self.data[__key] = __value
-        elif type(__value) is dict:
-            self.__recursive_check({__key: __value})
+        _rec(self, _check, self.template)
 
-            def __recursive_update(__input, __output):
-                for __i, __v in __input.items():
-                    if type(__v) is dict:
-                        __recursive_update(__v, __output[__i])
-                    else:
-                        __output[__i] = __v
-
-            __recursive_update(__value, self.data[__key])
+    def __init__(self, template, data=None, config_path=None):
+        self.template = template
+        self.data = None
+        if data is not None:
+            self.recursive_check(data)
+            self.data = self.template
+            self.data.update(data)
+        elif config_path is not None:
+            self.read(config_path)
         else:
-            raise self.__raise_type_error(self.types[__key], type(__value))
+            raise self.NoConfigAvailableException
+
+    def set(self, _key, _value):
+        if self.template[_key] == "path":
+            if type(_value) is not str:
+                self.raise_type_error("path (str)", type(_value))
+
+        if type(_value) is self.template[_key]:
+            self.data[_key] = _value
+        elif type(_value) is dict:
+            self.recursive_check({_key: _value})
+
+            def _recursive_update(_input, _output):
+                for _i, _v in _input.items():
+                    if type(_v) is dict:
+                        _recursive_update(_v, _output[_i])
+                    else:
+                        _output[_i] = _v
+
+            _recursive_update(_value, self.data[_key])
+        else:
+            raise self.raise_type_error(self.template[_key], type(_value))
 
     def get(self, key):
         try:
@@ -61,18 +81,27 @@ class Configs:
     def keys(self):
         return self.data.keys()
 
-    def write(self, __buffer=None):
+    def write(self, _buffer=None, _indent=False):
         try:
-            if __buffer is None:
-                __buffer = open(self.data["config_file"], "w+")
-            json.dump(self.data, __buffer)
+            if _buffer is None:
+                if "config_file" in self.data:
+                    _buffer = open(expanduser(expandvars(self.data["config_file"])), "w+")
+                else:
+                    raise self.MissingDefaultConfigFilePathException
+            json.dump(self.data, _buffer, indent=4)
         finally:
-            __buffer.close()
+            if hasattr(_buffer, "close"):
+                _buffer.close()
 
-    def read(self, __buffer=None):
+    def read(self, _buffer=None):
+        if _buffer is None:
+            if "config_file" in self.data:
+                _buffer = open(self.data["config_file"])
+            else:
+                raise self.MissingDefaultConfigFilePathException
         try:
-            if __buffer is None:
-                __buffer = open(self.data["config_file"])
-            self.data = json.load(__buffer)
-        finally:
-            __buffer.close()
+            _to_validate = json.load(_buffer)
+        except json.decoder.JSONDecodeError:
+            raise self.ConfigFormatErrorException
+        self.recursive_check(_to_validate)
+        self.data = _to_validate
