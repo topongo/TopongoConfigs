@@ -1,5 +1,6 @@
 import json
-from os.path import expandvars, expanduser
+from os.path import expandvars, expanduser, exists
+from copy import deepcopy
 
 
 class Configs:
@@ -28,6 +29,8 @@ class Configs:
                         _self.raise_type_error(type(_types[_i]), type(_v))
                     _rec(_self, _v, _types[_i])
                 elif type(_v) is list:
+                    if len(_v) == 0:
+                        continue
                     _uniq = set()
                     for _t in _types[_i]:
                         _uniq.add(type(_t))
@@ -40,23 +43,23 @@ class Configs:
         _rec(self, _check, self.template)
 
     def __init__(self, template, data=None, config_path=None):
-        self.template = template
+        self.template = deepcopy(template)
         self.data = None
-        if data is not None:
-            self.recursive_check(data)
-            self.data = self.template
-            self.data.update(data)
-        elif config_path is not None:
-            self.read(config_path)
+        self.data = deepcopy(self.template)
+        self._config_path = config_path
+        if data is None:
+            if self._config_path is not None:
+                self.read(self._config_path, update=True)
         else:
-            raise self.NoConfigAvailableException
+            self.recursive_check(data)
+            self.data.update(data)
 
     def set(self, _key, _value):
         if self.template[_key] == "path":
             if type(_value) is not str:
                 self.raise_type_error("path (str)", type(_value))
 
-        if type(_value) is self.template[_key]:
+        if type(_value) is type(self.template[_key]):
             self.data[_key] = _value
         elif type(_value) is dict:
             self.recursive_check({_key: _value})
@@ -81,27 +84,40 @@ class Configs:
     def keys(self):
         return self.data.keys()
 
-    def write(self, _buffer=None, _indent=False):
+    def write(self, _buffer=None, _indent=True):
         try:
             if _buffer is None:
                 if "config_file" in self.data:
                     _buffer = open(expanduser(expandvars(self.data["config_file"])), "w+")
+                elif self._config_path is not None:
+                    _buffer = open(self._config_path, "w+")
                 else:
                     raise self.MissingDefaultConfigFilePathException
+            else:
+                if type(_buffer) is str:
+                    _buffer = open(_buffer, "w+")
             json.dump(self.data, _buffer, indent=4)
         finally:
             if hasattr(_buffer, "close"):
                 _buffer.close()
 
-    def read(self, _buffer=None):
+    def read(self, _buffer=None, update=True):
         if _buffer is None:
             if "config_file" in self.data:
                 _buffer = open(self.data["config_file"])
+            elif self._config_path is not None:
+                _buffer = open(self._config_path)
             else:
                 raise self.MissingDefaultConfigFilePathException
+        else:
+            if type(_buffer) is str:
+                _buffer = open(_buffer)
         try:
             _to_validate = json.load(_buffer)
         except json.decoder.JSONDecodeError:
             raise self.ConfigFormatErrorException
         self.recursive_check(_to_validate)
-        self.data = _to_validate
+        if update:
+            self.data.update(_to_validate)
+        else:
+            self.data = _to_validate
