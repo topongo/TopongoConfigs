@@ -46,10 +46,10 @@ class Configs:
         self.template = deepcopy(template)
         self.data = None
         self.data = deepcopy(self.template)
-        self._config_path = config_path
+        self.config_path = config_path
         if data is None:
-            if self._config_path is not None:
-                self.read(self._config_path, update=True)
+            if self.config_path is not None:
+                self.read(self.config_path, update=True)
         else:
             self.recursive_check(data)
             self.data.update(data)
@@ -89,8 +89,8 @@ class Configs:
             if _buffer is None:
                 if "config_file" in self.data:
                     _buffer = open(expanduser(expandvars(self.data["config_file"])), "w+")
-                elif self._config_path is not None:
-                    _buffer = open(self._config_path, "w+")
+                elif self.config_path is not None:
+                    _buffer = open(self.config_path, "w+")
                 else:
                     raise self.MissingDefaultConfigFilePathException
             else:
@@ -105,8 +105,8 @@ class Configs:
         if _buffer is None:
             if "config_file" in self.data:
                 _buffer = open(self.data["config_file"])
-            elif self._config_path is not None:
-                _buffer = open(self._config_path)
+            elif self.config_path is not None:
+                _buffer = open(self.config_path)
             else:
                 raise self.MissingDefaultConfigFilePathException
         else:
