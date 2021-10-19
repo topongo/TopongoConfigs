@@ -3,6 +3,11 @@ from os.path import expandvars, expanduser, exists
 from copy import deepcopy
 
 
+def raise_type_error(_needed, _supplied):
+    TypeError(f"Invalid type, \"{_needed if type(_needed) is str else _needed.__name__}\" needed, "
+              f"\"{type(_supplied).__name__}\" supplied")
+
+
 class Configs:
     class MissingDefaultConfigFilePathException(Exception):
         pass
@@ -13,20 +18,16 @@ class Configs:
     class ConfigFormatErrorException(Exception):
         pass
 
-    def raise_type_error(self, _needed, _supplied):
-        TypeError(f"Invalid type, \"{_needed if type(_needed) is str else _needed.__name__}\" needed, "
-                  f"\"{type(_supplied).__name__}\" supplied")
-
     def recursive_check(self, _check):
         def _rec(_self, _input, _types):
             for _i, _v in _input.items():
                 if _i not in _types:
-                    raise KeyError(_i)
+                    raise KeyError(f"Unrecognized property \"{_i}\" in config file")
                 elif type(_v) is not type(_types[_i]):
-                    _self.raise_type_error(type(_types[_i]), type(_v))
+                    raise_type_error(type(_types[_i]), type(_v))
                 elif type(_v) is dict:
                     if type(_types[_i]) is not dict:
-                        _self.raise_type_error(type(_types[_i]), type(_v))
+                        raise_type_error(type(_types[_i]), type(_v))
                     _rec(_self, _v, _types[_i])
                 elif type(_v) is list:
                     if len(_v) == 0:
@@ -38,27 +39,25 @@ class Configs:
                         raise self.ConfigFormatErrorException(_uniq)
                     t = _types[_i][0]
                     if not all(map(lambda l: type(l) is t, _v)):
-                        _self.raise_type_error(t, type(_v))
+                        raise_type_error(t, type(_v))
 
         _rec(self, _check, self.template)
 
-    def __init__(self, template, data=None, config_path=None):
+    def __init__(self, template, data=None, config_path=None, write=False):
         self.template = deepcopy(template)
         self.data = None
         self.data = deepcopy(self.template)
         self.config_path = config_path
-        if data is None:
+        if data is None and not write:
             if self.config_path is not None:
                 self.read(self.config_path, update=True)
-        else:
+        elif not write:
             self.recursive_check(data)
             self.data.update(data)
+        else:
+            self.write()
 
     def set(self, _key, _value):
-        if self.template[_key] == "path":
-            if type(_value) is not str:
-                self.raise_type_error("path (str)", type(_value))
-
         if type(_value) is type(self.template[_key]):
             self.data[_key] = _value
         elif type(_value) is dict:
@@ -75,9 +74,12 @@ class Configs:
         else:
             raise self.raise_type_error(self.template[_key], type(_value))
 
-    def get(self, key):
+    def get(self, key, path=False):
         try:
-            return self.data[key]
+            if path:
+                return expandvars(expanduser(self.data[key]))
+            else:
+                return self.data[key]
         except KeyError:
             raise KeyError(key)
 
@@ -96,6 +98,7 @@ class Configs:
             else:
                 if type(_buffer) is str:
                     _buffer = open(_buffer, "w+")
+
             json.dump(self.data, _buffer, indent=4)
         finally:
             if hasattr(_buffer, "close"):
