@@ -72,7 +72,7 @@ class Configs:
 
             _recursive_update(_value, self.data[_key])
         else:
-            raise self.raise_type_error(self.template[_key], type(_value))
+            raise raise_type_error(self.template[_key], type(_value))
 
     def get(self, key, path=False):
         try:
@@ -99,7 +99,7 @@ class Configs:
                 if type(_buffer) is str:
                     _buffer = open(_buffer, "w+")
 
-            json.dump(self.data, _buffer, indent=4)
+            json.dump(self.data, _buffer, indent=4 if _indent else None)
         finally:
             if hasattr(_buffer, "close"):
                 _buffer.close()
