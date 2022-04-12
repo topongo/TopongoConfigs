@@ -1,6 +1,7 @@
 import json
 from os.path import expandvars, expanduser, exists
 from copy import deepcopy
+from datetime import datetime
 
 
 def raise_type_error(_needed, _supplied):
@@ -9,6 +10,10 @@ def raise_type_error(_needed, _supplied):
 
 
 class Configs:
+    INTERNAL_PROPERTIES = {
+        "__update_time__": int
+    }
+
     class MissingDefaultConfigFilePathException(Exception):
         pass
 
@@ -21,15 +26,19 @@ class Configs:
     def recursive_check(self, _check):
         def _rec(_self, _input, _types):
             for _i, _v in _input.items():
+                if _i in Configs.INTERNAL_PROPERTIES:
+                    if type(_v) is not Configs.INTERNAL_PROPERTIES[_i]:
+                        raise_type_error(type(_types[_i]), type(_v))
+                    else:
+                        continue
                 if _i not in _types:
                     raise KeyError(f"Unrecognized property \"{_i}\" in config file")
-                elif type(_v) is not type(_types[_i]):
+                elif isinstance(_v, type(_types[_i])):
                     raise_type_error(type(_types[_i]), type(_v))
-                elif type(_v) is dict:
-                    if type(_types[_i]) is not dict:
+                elif isinstance(_v, dict):
+                    if not isinstance(_types[_i], dict):
                         raise_type_error(type(_types[_i]), type(_v))
-                    _rec(_self, _v, _types[_i])
-                elif type(_v) is list:
+                elif isinstance(_v, list):
                     if len(_v) == 0:
                         continue
                     _uniq = set()
@@ -38,7 +47,7 @@ class Configs:
                     if len(_uniq) != 1:
                         raise self.ConfigFormatErrorException(_uniq)
                     t = _types[_i][0]
-                    if not all(map(lambda l: type(l) is t, _v)):
+                    if not all(map(lambda l: isinstance(l, type(t)), _v)):
                         raise_type_error(t, type(_v))
 
         _rec(self, _check, self.template)
@@ -58,11 +67,14 @@ class Configs:
             self.write()
 
     def set(self, _key, _value):
-        if type(_value) is type(self.template[_key]):
-            self.data[_key] = _value
-        elif type(_value) is dict:
-            self.recursive_check({_key: _value})
+        if _key in self.template and type(_value) is type(self.template[_key]):
+            self.set("__update_time__", datetime.now().timestamp())
+        elif _key in Configs.INTERNAL_PROPERTIES:
+            pass
+        else:
+            raise KeyError(_key)
 
+        if type(_value) is dict:
             def _recursive_update(_input, _output):
                 for _i, _v in _input.items():
                     if type(_v) is dict:
@@ -72,12 +84,17 @@ class Configs:
 
             _recursive_update(_value, self.data[_key])
         else:
+            self.data[_key] = _value
+
             raise raise_type_error(self.template[_key], type(_value))
 
-    def get(self, key, path=False):
+    def get(self, key, path=False, expanduser_func=None):
         try:
             if path:
-                return expandvars(expanduser(self.data[key]))
+                if expanduser_func is None:
+                    return expandvars(expanduser(self.data[key]))
+                else:
+                    return expandvars(expanduser_func(self.data[key]))
             else:
                 return self.data[key]
         except KeyError:
