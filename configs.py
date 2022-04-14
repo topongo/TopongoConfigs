@@ -1,4 +1,5 @@
 import json
+import os
 from os.path import expandvars, expanduser, exists
 from copy import deepcopy
 from datetime import datetime
@@ -68,6 +69,10 @@ class Configs:
             self.data.update(data)
         else:
             self.write()
+        if "__update_time__" not in self.data:
+            if config_path:
+                mtime = os.stat(config_path).st_mtime
+                self.set("__update_time__", mtime)
 
     @staticmethod
     def check_for_reserved(_key):
