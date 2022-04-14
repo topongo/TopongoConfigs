@@ -23,6 +23,9 @@ class Configs:
     class ConfigFormatErrorException(Exception):
         pass
 
+    class ReservedPropertyException(Exception):
+        pass
+
     def recursive_check(self, _check):
         def _rec(_self, _input, _types):
             for _i, _v in _input.items():
@@ -66,11 +69,22 @@ class Configs:
         else:
             self.write()
 
+    @staticmethod
+    def check_for_reserved(_key):
+        if len(_key) >= 2 and _key[0:2] == "__" and _key not in Configs.INTERNAL_PROPERTIES:
+            raise Configs.ReservedPropertyException
+
     def set(self, _key, _value):
-        if _key in self.template and type(_value) is type(self.template[_key]):
-            self.set("__update_time__", datetime.now().timestamp())
+        Configs.check_for_reserved(_key)
+
+        if _key in self.template:
+            if type(_value) is not type(self.template[_key]):
+                raise_type_error(type(self.template[_key]), type(_value))
         elif _key in Configs.INTERNAL_PROPERTIES:
-            pass
+            if type(_value) is not type(Configs.INTERNAL_PROPERTIES[_key]):
+                raise_type_error(type(Configs.INTERNAL_PROPERTIES[_key]), type(_value))
+            else:
+                self.set("__update_time__", datetime.now().timestamp())
         else:
             raise KeyError(_key)
 
@@ -85,8 +99,6 @@ class Configs:
             _recursive_update(_value, self.data[_key])
         else:
             self.data[_key] = _value
-
-            raise raise_type_error(self.template[_key], type(_value))
 
     def get(self, key, path=False, expanduser_func=None):
         try:
