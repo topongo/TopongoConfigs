@@ -11,6 +11,7 @@ def raise_type_error(_needed, _supplied):
 
 
 class Configs:
+    # TODO: change this for multiple types
     INTERNAL_PROPERTIES = {
         "__update_time__": int
     }
@@ -72,7 +73,9 @@ class Configs:
         if "__update_time__" not in self.data:
             if config_path:
                 mtime = os.stat(config_path).st_mtime
-                self.set("__update_time__", mtime)
+                self.set("__update_time__", int(mtime))
+            else:
+                self.set("__update_time__", int(datetime.now().timestamp()))
 
     @staticmethod
     def check_for_reserved(_key):
