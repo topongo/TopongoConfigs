@@ -33,6 +33,9 @@ class Configs:
     class ReservedPropertyException(Exception):
         pass
 
+    class MissingPropertyException(Exception):
+        pass
+
     def recursive_check(self, _check):
         def _rec(_self, _input, _types):
             for _i, _v in _input.items():
@@ -67,7 +70,7 @@ class Configs:
 
         _rec(self, _check, self.template)
 
-    def __init__(self, template, data=None, config_path=None, write=False):
+    def __init__(self, template, data=None, config_path=None, write=False, raise_for_update_time=False):
         self.template = deepcopy(template)
         self.data = None
         self.data = deepcopy(self.template)
@@ -81,6 +84,8 @@ class Configs:
         else:
             self.write()
         if "__update_time__" not in self.data:
+            if raise_for_update_time:
+                raise Configs.MissingPropertyException()
             if config_path:
                 mtime = os.stat(config_path).st_mtime
                 self.set("__update_time__", int(mtime))
