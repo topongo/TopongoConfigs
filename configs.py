@@ -6,14 +6,19 @@ from datetime import datetime
 
 
 def raise_type_error(_needed, _supplied):
-    TypeError(f"Invalid type, \"{_needed if type(_needed) is str else _needed.__name__}\" needed, "
-              f"\"{type(_supplied).__name__}\" supplied")
+    if isinstance(_needed, tuple):
+        _needed_str = "|".join([type(_i).__name__ if type(_i) is not type else _i.__name__ for _i in _needed])
+    else:
+        _needed_str = type(_needed).__name__ if type(_needed) is not type else _needed.__name__
+
+    raise TypeError(f"Invalid type, {_needed_str} needed, "
+                    f"{type(_supplied).__name__ if type(_supplied) is not type else _supplied.__name__} supplied")
 
 
 class Configs:
     # TODO: change this for multiple types
     INTERNAL_PROPERTIES = {
-        "__update_time__": int
+        "__update_time__": (int, float)
     }
 
     class MissingDefaultConfigFilePathException(Exception):
@@ -32,17 +37,22 @@ class Configs:
         def _rec(_self, _input, _types):
             for _i, _v in _input.items():
                 if _i in Configs.INTERNAL_PROPERTIES:
-                    if type(_v) is not Configs.INTERNAL_PROPERTIES[_i]:
-                        raise_type_error(type(_types[_i]), type(_v))
+                    if isinstance(Configs.INTERNAL_PROPERTIES[_i], tuple):
+                        if not isinstance(_v, Configs.INTERNAL_PROPERTIES[_i]):
+                            raise_type_error(Configs.INTERNAL_PROPERTIES[_i], _v)
+                        else:
+                            continue
+                    elif type(_v) is not Configs.INTERNAL_PROPERTIES[_i]:
+                        raise_type_error(Configs.INTERNAL_PROPERTIES[_i], type(_v))
                     else:
                         continue
                 if _i not in _types:
                     raise KeyError(f"Unrecognized property \"{_i}\" in config file")
-                elif isinstance(_v, type(_types[_i])):
-                    raise_type_error(type(_types[_i]), type(_v))
+                elif not isinstance(_v, type(_types[_i])):
+                    raise_type_error(_types[_i], _v)
                 elif isinstance(_v, dict):
                     if not isinstance(_types[_i], dict):
-                        raise_type_error(type(_types[_i]), type(_v))
+                        raise_type_error(_types[_i], _v)
                 elif isinstance(_v, list):
                     if len(_v) == 0:
                         continue
@@ -76,6 +86,7 @@ class Configs:
                 self.set("__update_time__", int(mtime))
             else:
                 self.set("__update_time__", int(datetime.now().timestamp()))
+            self.write()
 
     @staticmethod
     def check_for_reserved(_key):
@@ -86,13 +97,12 @@ class Configs:
         Configs.check_for_reserved(_key)
 
         if _key in self.template:
-            if type(_value) is not type(self.template[_key]):
-                raise_type_error(type(self.template[_key]), type(_value))
-        elif _key in Configs.INTERNAL_PROPERTIES:
-            if type(_value) is not type(Configs.INTERNAL_PROPERTIES[_key]):
-                raise_type_error(type(Configs.INTERNAL_PROPERTIES[_key]), type(_value))
-            else:
+            if not isinstance(_value, type(self.template[_key])):
+                raise_type_error(self.template[_key], _value)
                 self.set("__update_time__", datetime.now().timestamp())
+        elif _key in Configs.INTERNAL_PROPERTIES:
+            if not isinstance(_value, Configs.INTERNAL_PROPERTIES[_key]):
+                raise_type_error(Configs.INTERNAL_PROPERTIES[_key], _value)
         else:
             raise KeyError(_key)
 
