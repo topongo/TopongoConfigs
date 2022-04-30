@@ -18,7 +18,8 @@ def raise_type_error(_needed, _supplied):
 class Configs:
     # TODO: change this for multiple types
     INTERNAL_PROPERTIES = {
-        "__update_time__": (int, float)
+        "__update_time__": (int, float),
+        "__to_sync__": bool
     }
 
     class MissingDefaultConfigFilePathException(Exception):
@@ -91,6 +92,9 @@ class Configs:
                 self.set("__update_time__", int(mtime))
             else:
                 self.set("__update_time__", int(datetime.now().timestamp()))
+            self.write()
+        if "__to_sync__" not in self.data:
+            self.set("__to_sync__", False)
             self.write()
 
     @staticmethod
